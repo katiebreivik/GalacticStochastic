@@ -118,7 +118,7 @@ if __name__ == '__main__':
         S_stat_smooth_m[itrl_fit:, fit_mask, :], fs[fit_mask], fs[1:], nt_ranges[itrl_fit:], S_stat_offset[fit_mask], wc.DT,
     )
 
-f_star = 3e8 / (2*np.pi**2*2.5e9)
+f_star = 3e8 / (np.pi**2*2.5e9)
 transfer_func = 4 * (fs / f_star)**2 * (np.sin(fs / f_star))**2
 #import pdb; pdb.set_trace()
 fig = plt.figure(figsize=(6, 4))
