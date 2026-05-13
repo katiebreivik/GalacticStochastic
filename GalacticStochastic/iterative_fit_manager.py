@@ -197,6 +197,9 @@ class IterativeFitManager(StateManager):
 
         if self.fit_state.preprocess_mode != 1:
             for key in self.ic._fields:
+                # Skip validation for fields absent in old HDF5 files (backward compatibility).
+                if key not in hf_ic.attrs:
+                    continue
                 assert np.all(getattr(self.ic, key) == hf_ic.attrs[key]), (
                     f'ic attribute {key} does not match saved value'
                 )

@@ -59,6 +59,7 @@ def get_sparse_snr_helper(
     wc: WDMWaveletConstants,
     inv_chol_S: NDArray[np.floating],
     nc_snr: int,
+    strain2_min: float,
 ) -> NDArray[np.floating]:
     """
     Calculate the S/N ratio for each TDI channel for a given intrinsic_waveform.
@@ -80,6 +81,8 @@ def get_sparse_snr_helper(
         an array of shape (nc_noise) which is the S/N for each TDI channel represented.
 
     """
+    assert strain2_min >= 0.0
+
     snr2s = np.zeros(nc_snr)
     for itrc in range(nc_snr):
         n_pixel_loc: int = int(wavelet_waveform.n_set[itrc])
@@ -87,6 +90,18 @@ def get_sparse_snr_helper(
         wave_value_loc: NDArray[np.floating] = wavelet_waveform.wave_value[itrc, :]
         i_itrs: NDArray[np.integer] = np.mod(pixel_index_loc, wc.Nf)
         j_itrs: NDArray[np.integer] = (pixel_index_loc - i_itrs) // wc.Nf
+
+        # Compute a quick strain-power gate in the same time window before whitening.
+        strain2_loc = 0.0
+        for mm in range(n_pixel_loc):
+            j_loc: int = int(j_itrs[mm])
+            if nt_lim_snr.nx_min <= j_loc < nt_lim_snr.nx_max:
+                wave_value = float(wave_value_loc[mm])
+                strain2_loc += wave_value * wave_value
+
+        if strain2_loc < strain2_min:
+            continue
+
         for mm in range(n_pixel_loc):
             j_loc: int = int(j_itrs[mm])
             i_loc: int = int(i_itrs[mm])
@@ -270,7 +285,7 @@ class DenseNoiseModel(ABC):
         return res
 
     def get_sparse_snrs(
-        self, wavelet_waveform: SparseWaveletWaveform, nt_lim_snr: PixelGenericRange
+        self, wavelet_waveform: SparseWaveletWaveform, nt_lim_snr: PixelGenericRange, strain2_min: float = 0.0
     ) -> NDArray[np.floating]:
         """Get S/N of intrinsic_waveform in each TDI channel.
 
@@ -283,13 +298,23 @@ class DenseNoiseModel(ABC):
             a sparse wavelet domain intrinsic_waveform
         nt_lim_snr: PixelGenericRange
             the range of time pixels to consider for snr calculations
+        strain2_min: float
+            if >0, skip SNR calculation for a channel when the unwhitened strain power in
+            the selected time range is below this threshold
 
         Returns
         -------
         snr : numpy.ndarray
             an array of shape (nc_noise) which is the S/N for each TDI channel represented.
         """
-        return get_sparse_snr_helper(wavelet_waveform, nt_lim_snr, self._wc, self.get_inv_chol_S(), self._nc_snr)
+        return get_sparse_snr_helper(
+            wavelet_waveform,
+            nt_lim_snr,
+            self._wc,
+            self.get_inv_chol_S(),
+            self._nc_snr,
+            strain2_min,
+        )
 
     def store_hdf5(
         self, hf_in: h5py.Group, *, group_name: str = 'dense_noise_model', group_mode: int = 0

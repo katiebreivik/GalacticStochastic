@@ -23,6 +23,7 @@ class IterationConfig(NamedTuple):
     nc_galaxy: int
     snr_min_preprocess: float
     snr_min_reprocess: float
+    strain2_min_snr_skip: float
     noise_model_storage_mode: int
     background_storage_mode: int
     fit_state_storage_mode: int
@@ -161,6 +162,10 @@ def get_iteration_config(config: dict[str, Any]) -> IterationConfig:
     snr_min_reprocess = float(config_ic['snr_min_reprocess'])
     assert snr_min_reprocess >= snr_min_preprocess
 
+    # optional strain-power gate: skip SNR work for channels below this unwhitened power
+    strain2_min_snr_skip = float(config_ic.get('strain2_min_snr_skip', 0.0))
+    assert strain2_min_snr_skip >= 0.0
+
     # select mode for the storage of the various objects
     noise_model_storage_mode = int(config_ic.get('noise_model_storage_mode', 0))
     background_storage_mode = int(config_ic.get('background_storage_mode', 0))
@@ -189,6 +194,7 @@ def get_iteration_config(config: dict[str, Any]) -> IterationConfig:
         nc_galaxy,
         snr_min_preprocess,
         snr_min_reprocess,
+        strain2_min_snr_skip,
         noise_model_storage_mode,
         background_storage_mode,
         fit_state_storage_mode,

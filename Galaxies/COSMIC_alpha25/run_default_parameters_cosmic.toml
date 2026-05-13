@@ -17,6 +17,9 @@ instrument_noise_realization_seed = 31415926
 
 [iterative_fit_constants]
 
+# minimum strain for which to skip the snr
+strain2_min_snr_skip = 1e-43
+
 # periodicities to fit to cyclostationary model; 1/year, 2/year, 3/year, etc
 period_list = [1, 2, 3, 4, 5]
 
@@ -110,7 +113,9 @@ component_list = ['dgb']
 Nf = 2048
 
 # number of time layers in wavelet transform (should be even)
-Nt = 4096
+# 4096 is 8 years
+# 512 is 1 year
+Nt = 512
 
 # time sampling cadence in seconds (note that the total time covered by the transform will be Nf*Nt*dt)
 # dt is the only quantity in the definition of the wavelet transform that has units

@@ -5,6 +5,9 @@ from typing import Any
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import astropy.units as u
+import argparse
+
 
 from GalacticStochastic import config_helper
 from GalacticStochastic.galactic_fit_helpers import fit_gb_spectrum_evolve, get_S_cyclo
@@ -28,10 +31,14 @@ if __name__ == '__main__':
     _: Any
     # filename_config = 'default_parameters.toml'
     # filename_config = 'Galaxies/GalaxyFullLDC/run_old_parameters_format4.toml'
-    filename_config = 'parameters_default_12year.toml'
-    target_directory = 'Galaxies/GalaxyFullLDC/'
-    # filename_config = 'Galaxies/COSMIC_alpha25/parameters_default_12year.toml'
-    # target_directory = 'Galaxies/COSMIC_alpha25/'
+    #filename_config = 'parameters_default_12year.toml'
+    #target_directory = 'Galaxies/GalaxyFullLDC/'
+    #filename_config = 'Galaxies/COSMIC_fiducial/run_default_parameters_cosmic.toml'
+    #target_directory = 'Galaxies/COSMIC_fiducial/'
+    #filename_config = 'Galaxies/COSMIC_alpha25/run_default_parameters_cosmic.toml'
+    #target_directory = 'Galaxies/COSMIC_alpha25/'
+    #filename_config = '/Users/kbreivik/Data/Synthetic-UCBs/data_products/simulated_galaxy_populations/monte_carlo_comparisons/initial_condition_variations/fiducial/run_default_parameters_cosmic.toml' 
+    #target_directory = '/Users/kbreivik/Data/Synthetic-UCBs/data_products/simulated_galaxy_populations/monte_carlo_comparisons/initial_condition_variations/fiducial/' 
     # filename_config = 'Galaxies/FZq3Z/parameters_default_12year.toml'
     # target_directory = 'Galaxies/FZq3Z/'
     # filename_config = 'Galaxies/FZAlpha5/parameters_default_12year.toml'
@@ -39,18 +46,32 @@ if __name__ == '__main__':
     # filename_config = 'Galaxies/FZFiducial/parameters_default_12year.toml'
     # target_directory = 'Galaxies/FZFiducial/'
 
+    parser = argparse.ArgumentParser(
+        prog='run-galactic-stochastic-iterative',
+        description='Run iterative processing for a galactic binary file',
+    )
+    
+    parser.add_argument('galaxy_dir', help='target galaxy directory')
+    parser.add_argument('config_file', help='path to config file')
+    parser.add_argument('figure_file', help='path to output figure file')
+
+    target_directory = str(parser.parse_args().galaxy_dir)
+    filename_config = str(parser.parse_args().config_file)
+    figure_file = str(parser.parse_args().figure_file)  
     config, wc, lc, ic, instrument_random_seed = config_helper.get_config_objects(filename_config)
     config['files']['galaxy_dir'] = target_directory
 
     fs = np.arange(0, wc.Nf) * wc.DF
 
     cyclo_mode = 0
-    idx_use = [0, 1, 3, 7, 11]
-    nt_incr = int(wc.Nt // 24)
+    idx_use = [-1]
+    nt_incr = int(wc.Nt // 2)
     # nt_mins = np.array([nt_incr * 7, nt_incr * 6, nt_incr * 5, nt_incr * 4, nt_incr * 3, nt_incr * 2, nt_incr * 1, nt_incr * 0])[idx_use]
     # nt_maxs = np.array([2 * nt_incr * 1, 2 * nt_incr * 2, 2 * nt_incr * 3, 2 * nt_incr * 4, 2 * nt_incr * 5, 2 * nt_incr * 6, 2 * nt_incr * 7, 2 * nt_incr * 8])[idx_use] + nt_mins
-    nt_mins = np.array([nt_incr * 11, nt_incr * 10, nt_incr * 9, nt_incr * 8, nt_incr * 7, nt_incr * 6, nt_incr * 5, nt_incr * 4, nt_incr * 3, nt_incr * 2, nt_incr * 1, nt_incr * 0])[idx_use]
-    nt_maxs = np.array([2 * nt_incr * 1, 2 * nt_incr * 2, 2 * nt_incr * 3, 2 * nt_incr * 4, 2 * nt_incr * 5, 2 * nt_incr * 6, 2 * nt_incr * 7, 2 * nt_incr * 8, 2 * nt_incr * 9, 2 * nt_incr * 10, 2 * nt_incr * 11, 2 * nt_incr * 12])[idx_use] + nt_mins
+    nt_mins = np.array([0])
+    nt_maxs = np.array([nt_incr*2])
+    #nt_mins = np.array([nt_incr * 11, nt_incr * 10, nt_incr * 9, nt_incr * 8, nt_incr * 7, nt_incr * 6, nt_incr * 5, nt_incr * 4, nt_incr * 3, nt_incr * 2, nt_incr * 1, nt_incr * 0])[idx_use]
+    #nt_maxs = np.array([2 * nt_incr * 1, 2 * nt_incr * 2, 2 * nt_incr * 3, 2 * nt_incr * 4, 2 * nt_incr * 5, 2 * nt_incr * 6, 2 * nt_incr * 7, 2 * nt_incr * 8, 2 * nt_incr * 9, 2 * nt_incr * 10, 2 * nt_incr * 11, 2 * nt_incr * 12])[idx_use] + nt_mins
 
     nt_ranges = nt_maxs - nt_mins
     nk = nt_maxs.size
@@ -97,27 +118,32 @@ if __name__ == '__main__':
         S_stat_smooth_m[itrl_fit:, fit_mask, :], fs[fit_mask], fs[1:], nt_ranges[itrl_fit:], S_stat_offset[fit_mask], wc.DT,
     )
 
-fig = plt.figure(figsize=(5.4, 3.5))
+f_star = 3e8 / (2*np.pi**2*2.5e9)
+transfer_func = 4 * (fs / f_star)**2 * (np.sin(fs / f_star))**2
+#import pdb; pdb.set_trace()
+fig = plt.figure(figsize=(6, 4))
 ax = fig.subplots(1)
-fig.subplots_adjust(wspace=0.0, hspace=0.0, left=0.13, top=0.99, right=0.99, bottom=0.12)
+#fig.subplots_adjust(wspace=0.0, hspace=0.0, left=0.13, top=0.99, right=0.99, bottom=0.12)
 _ = ax.loglog(
     fs[1:],
-    wc.dt * (S_stat_smooth_m[:, 1:, :2].mean(axis=2) - S_stat_offset[1:] + S_inst_m[1:, 0]).T,
+    wc.dt * ((S_stat_smooth_m[:, 1:, :2].mean(axis=2) - S_stat_offset[1:] + S_inst_m[1:, 0]) / transfer_func[1:]).T,
     alpha=0.5,
     label='_nolegend_',
 )
 ax.set_prop_cycle(None)
-_ = ax.loglog(fs[1:], wc.dt * (S_fit_evolve_m[:] + S_inst_m[1:, 0]).T, linewidth=3)
+_ = ax.loglog(fs[1:], wc.dt * ((S_fit_evolve_m[:] + S_inst_m[1:, 0]) / transfer_func[1:]).T, linewidth=3)
 ax.set_prop_cycle(None)
-_ = ax.loglog(fs[1:], wc.dt * (S_inst_m[1:, 0]), 'k--')
+_ = ax.loglog(fs[1:], wc.dt * (S_inst_m[1:, 0]) / transfer_func[1:], 'k--')
 ax.tick_params(axis='both', direction='in', which='both', top=True, right=True)
 # _ = plt.ylim([wc.dt * 2.0e-44, wc.dt * 2.0e-43])
-_ = plt.ylim([1.e-43, 2.0e-39])
-_ = plt.xlim([3.0e-4, 6.0e-3])
+#_ = plt.ylim([1.e-47, 2.0e-39])
+_ = plt.xlim([1.0e-4, 6.0e-3])
 _ = plt.xlabel('f [Hz]')
-_ = plt.ylabel(r'$S^{AE}(f)$ [Hz$^{-1}$]')
-_ = plt.legend(labels=['1 year', '2 years', '4 years', '8 years'])
-plt.show()
+#_ = plt.ylabel(r'$S^{AE}(f)$ [Hz$^{-1}$]')
+_ = plt.ylabel(r'$PSD(f)$ [Hz$^{-1}$]')
+_ = plt.legend(labels=['1 year'])
+fig.tight_layout()
+fig.savefig(figure_file, dpi=200)
 
 # fig = plt.figure(figsize=(5.4, 3.5))
 # ax = fig.subplots(1)

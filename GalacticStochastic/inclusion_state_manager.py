@@ -15,6 +15,7 @@ import GalacticStochastic.global_const as gc
 from GalacticStochastic.state_manager import StateManager
 from LisaWaveformTools.linear_frequency_source import LinearFrequencyIntrinsicParams, LinearFrequencyWaveletWaveformTime
 from LisaWaveformTools.source_params import ExtrinsicParams, SourceParams
+from WaveletWaveforms.sparse_waveform_functions import SparseWaveletWaveform
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -347,6 +348,11 @@ class BinaryInclusionState(StateManager):
 
         del params0
         del params0_sel
+
+        # Waveform cache: binary parameters never change between iterations, so each undecided
+        # binary's SparseWaveletWaveform is identical every iteration.  Cache it after the first
+        # computation and reuse it to skip the expensive wavemaket call in subsequent iterations.
+        self._wf_cache: list[SparseWaveletWaveform | None] = [None] * self._n_bin_use
 
         self._itrn: int = 0
 
@@ -892,13 +898,15 @@ class BinaryInclusionState(StateManager):
         """
         return (self._oscillation_check_helper(), self._delta_faint_check_helper(), self._delta_bright_check_helper())
 
-    def _snr_storage_helper(self, itrb: int) -> None:
+    def _snr_storage_helper(self, itrb: int, wavelet_waveform: SparseWaveletWaveform) -> None:
         """Store the snrs of the current binary.
 
         Parameters
         ----------
         itrb: int
             The index of the binary under consideration.
+        wavelet_waveform: SparseWaveletWaveform
+            The pre-computed sparse wavelet representation for this binary.
 
         Raises
         ------
@@ -906,7 +914,6 @@ class BinaryInclusionState(StateManager):
             If a NaN or non-finite value is detected in the total SNRs.
         """
         itrn = self._itrn
-        wavelet_waveform = self._waveform_manager.get_unsorted_coeffs()
 
         # don't need to track lower snrs at all during initial pre-processing
 
@@ -914,6 +921,7 @@ class BinaryInclusionState(StateManager):
             self._snrs_upper[itrn, itrb] = self._noise_manager.noise_upper.get_sparse_snrs(
                 wavelet_waveform,
                 self._noise_manager.nt_lim_snr,
+                strain2_min=self._ic.strain2_min_snr_skip,
             )
             self._snrs_tot_upper[itrn, itrb] = np.linalg.norm(self._snrs_upper[itrn, itrb])
         else:
@@ -926,6 +934,7 @@ class BinaryInclusionState(StateManager):
                 self._snrs_lower[itrn, itrb] = self._noise_manager.noise_lower.get_sparse_snrs(
                     wavelet_waveform,
                     self._noise_manager.nt_lim_snr,
+                    strain2_min=self._ic.strain2_min_snr_skip,
                 )
                 self._snrs_tot_lower[itrn, itrb] = np.linalg.norm(self._snrs_lower[itrn, itrb])
             else:
@@ -995,13 +1004,15 @@ class BinaryInclusionState(StateManager):
 
         return bright_loc, faint_loc
 
-    def _decide_coadd_helper(self, itrb: int) -> None:
+    def _decide_coadd_helper(self, itrb: int, wavelet_waveform: SparseWaveletWaveform) -> None:
         """Add each binary to the correct part of the galactic spectrum, depending on whether it is bright or faint.
 
         Parameters
         ----------
         itrb: int
             The index of the binary under consideration.
+        wavelet_waveform: SparseWaveletWaveform
+            The pre-computed sparse wavelet representation for this binary.
         """
         itrn = self._itrn
         # the same binary cannot be decided as both bright and faint
@@ -1010,8 +1021,6 @@ class BinaryInclusionState(StateManager):
         # don't add to anything if the bright adaptation is already converged and this binary would not be faint
         if self._fit_state.get_bright_converged() and not self._faints_cur[itrn, itrb]:
             return
-
-        wavelet_waveform = self._waveform_manager.get_unsorted_coeffs()
 
         if not self._faints_cur[itrn, itrb]:
             if self._brights[itrn, itrb]:
@@ -1037,12 +1046,30 @@ class BinaryInclusionState(StateManager):
             The index of the binary under consideration.
         """
         itrn = self._itrn
-        params_loc = unpack_params_gb(self._params_gb[itrb])
-        self._waveform_manager.update_params(params_loc)
+        cached_wf = self._wf_cache[itrb]
+        if cached_wf is None:
+            params_loc = unpack_params_gb(self._params_gb[itrb])
+            self._waveform_manager.update_params(params_loc)
+            wavelet_waveform: SparseWaveletWaveform = self._waveform_manager.get_unsorted_coeffs()
+        else:
+            wavelet_waveform = cached_wf
 
-        self._snr_storage_helper(itrb)
+        self._snr_storage_helper(itrb, wavelet_waveform)
         self._brights[itrn, itrb], self._faints_cur[itrn, itrb] = self._decision_helper(itrb)
-        self._decide_coadd_helper(itrb)
+        self._decide_coadd_helper(itrb, wavelet_waveform)
+
+        # Cache the waveform for undecided binaries so subsequent iterations can skip wavemaket.
+        # Binary parameters never change, so the waveform is identical on every iteration.
+        if (
+            cached_wf is None
+            and not self._brights[itrn, itrb]
+            and not self._faints_cur[itrn, itrb]
+            and not self._faints_old[itrb]
+        ):
+            wv = wavelet_waveform
+            self._wf_cache[itrb] = SparseWaveletWaveform(
+                wv.wave_value.copy(), wv.pixel_index.copy(), wv.n_set.copy(), wv.n_pixel_max
+            )
 
     def get_final_snrs_tot_upper(self) -> NDArray[np.floating]:
         """Get the most recently stored snrs in the upper noise model for all binaries under consideration.

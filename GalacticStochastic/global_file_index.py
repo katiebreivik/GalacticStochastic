@@ -18,7 +18,7 @@ from WaveletWaveforms.wdm_config import WDMWaveletConstants
 load_cosmic: Any
 try:
     # pandas is an optional import
-    from GalacticStochastic.cosmic_data_helpers import load_cosmic
+    from GalacticStochastic.cosmic_data_helpers import load_cosmic, load_AWG_ab, load_AWG_kb
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -203,10 +203,21 @@ def get_full_galactic_params(config: dict[str, Any]) -> tuple[NDArray[np.floatin
     config_files: dict[str, str] = config['files']
     cosmic = bool(config_files.get('cosmic_data', False))
     assert isinstance(cosmic, bool)
+    
+    AWG_ab = bool(config_files.get('AWG_data_ab', False))
+    assert isinstance(AWG_ab, bool)
+
+    AWG_kb = bool(config_files.get('AWG_data_kb', False))
+    assert isinstance(AWG_kb, bool)
     if cosmic:
         params_gb, ns_got = load_cosmic(filename, categories)
         n_tot = int(ns_got.sum())
-
+    elif AWG_ab:
+        params_gb, ns_got = load_AWG_ab(filename, categories)
+        n_tot = int(ns_got.sum())
+    elif AWG_kb:
+        params_gb, ns_got = load_AWG_kb(filename, categories)
+        n_tot = int(ns_got.sum())
     else:
         hf_in = h5py.File(filename, 'r')
 
